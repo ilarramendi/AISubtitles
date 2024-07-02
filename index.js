@@ -132,7 +132,7 @@ async function translatePath(path) {
 		return;
 	}
 	const groups = groupSegmentsByTokenLength(matches, MAX_TOKENS);
-	const chunks = [];
+	const globalStart = performance.now();
 	for (let i = 0; i < groups.length; i += 10) {
 		await Promise.all(groups.slice(i, i + 10).map(async group => {
 			const start = performance.now();
@@ -150,6 +150,6 @@ async function translatePath(path) {
 		path.replace(/(?:\.en(?:-[a-z]+)?)?\.srt$/, `.${TARGET_LANGUAGE} (AI).srt`),
 		matches.map(m => m.header + m.translatedContent).join('\n\n')
 	);
-	console.log('Successfully translated');
+	console.log('Successfully translated in', ((performance.now() - globalStart) / 1000).toFixed(2), 'seconds');
 }
 
