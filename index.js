@@ -124,7 +124,7 @@ async function translate(text) {
 async function translatePath(path) {
 	const split = path.split('/');
 	split.pop();
-	const existingFiles = glob.sync(split.join('/') + `/*.srt`);
+	const existingFiles = glob.sync(split.join('/').replaceAll(/([[\]])/g, '\\$1') + `/*.srt`);
 	for (const existingFile of existingFiles) {
 		if (existingFile.endsWith(`.${TARGET_LANGUAGE} (AI).srt`)) {
 			console.warn('Skipping, already translated:', path);
@@ -154,8 +154,8 @@ async function translatePath(path) {
 	const groups = groupSegmentsByTokenLength(matches, MAX_TOKENS);
 	for (const group of groups) {
 		const translated = await translate(group.map(m => m.content).join('|'));
-		for (const [i, translatedMatch] of translated.entries()) {
-			group[i].translatedContent = translatedMatch;
+		for (const [i, groupMatch] of group.entries()) {
+			groupMatch.translatedContent = translated[i];
 		}
 	}
 	fs.writeFileSync(
