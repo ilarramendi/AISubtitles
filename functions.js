@@ -9,7 +9,7 @@ import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
 dotenv.config();
 
-let { TARGET_LANGUAGE, LANGUAGE_SHORT, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
+let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
 const executionCache = {};
 const englishAlias = ['en', 'eng', 'english'];
 const textSubtitleFormats = ['srt', 'ass', 'webvtt', 'subrip', 'ttml', 'vtt', 'mov_text'];
@@ -22,7 +22,7 @@ let jobs = [];
 if (fs.existsSync(cachePath)) {
 	jobs = JSON.parse(fs.readFileSync(cachePath).toString());
 }
-LANGUAGE_SHORT = LANGUAGE_SHORT.split(',').map(s => s.trim()).filter(Boolean);
+TARGET_LANGUAGE_ALIAS = TARGET_LANGUAGE_ALIAS.split(',').map(s => s.trim()).filter(Boolean);
 
 const prompt = `You are an experienced semantic translator.
 Follow the instructions carefully.
@@ -182,7 +182,7 @@ function ffmpegSubtitles(inputVideo) {
 				return resolve({});
 			}
 			const englishSub = subtitleStreams.find(s => englishAlias.includes(s.tags.language.toLowerCase()));
-			const translation = subtitleStreams.find(stream => LANGUAGE_SHORT.includes(stream.tags.language));
+			const translation = subtitleStreams.find(stream => TARGET_LANGUAGE_ALIAS.includes(stream.tags.language));
 			const outputFile = inputVideo.replace(/\.(mkv|mp4)$/, '.English (Extracted).srt');
 			if (translation) {
 				console.log('Extracting embedded subtitles for target language instead of translating');
@@ -258,7 +258,7 @@ export async function translatePath(path, index, total) {
 			return;
 		}
 		if (!process.argv.includes('--ignore-existing-translation')) {
-			if (LANGUAGE_SHORT.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`) || existingFile.endsWith(`.${TARGET_LANGUAGE} (Extracted).srt`)) {
+			if (TARGET_LANGUAGE_ALIAS.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`) || existingFile.endsWith(`.${TARGET_LANGUAGE} (Extracted).srt`)) {
 				if (debug) console.warn('Skipping, existing translation:', path);
 				return;
 			}
