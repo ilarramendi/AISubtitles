@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import process from 'node:process';
 import {glob} from 'glob';
 import {batchTranslations, checkBatchStatus, pendingJobs, translatePath} from './functions.js';
