@@ -1,8 +1,9 @@
 import process from 'node:process';
 import fs from 'node:fs';
 import {glob} from 'glob';
-import { encoding_for_model } from "tiktoken";
+import {encoding_for_model} from "tiktoken";
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const {OPENAI_API_KEY, TARGET_LANGUAGE, LANGUAGE_SHORT, EXTRA_SPECIFICATION, MAX_TOKENS, AI_MODEL} = process.env;
@@ -116,15 +117,15 @@ async function translate(text) {
 			}
 			throw new Error('Failed to translate, translation length mismatch, received ' + split.length + ' segments, expected ' + text.split('|').length);
 		}
-
-		return split;
 	}
+
+	return split;
 }
 
 async function translatePath(path) {
 	let [_, ...ext] = path.split('/').pop().split('.');
 	ext = ext.join('.');
-	const existingFiles = glob.sync(path.replace(ext, '*.srt'));
+	const existingFiles = glob.sync(path.replace(ext, '**.srt'));
 	for (const existingFile of existingFiles) {
 		if (existingFile.endsWith(`.${TARGET_LANGUAGE} (AI).srt`)) {
 			console.warn('Skipping, already translated:', path);
