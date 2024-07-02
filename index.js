@@ -3,7 +3,8 @@ import process from 'node:process';
 import {glob} from 'glob';
 import {batchTranslations, checkBatchStatus, pendingJobs, translatePath} from './functions.js';
 
-const paths = glob.sync(process.argv[2]).filter(path => path.match(/\.(mkv|mp4)$/)).sort();
+const pattern = process.argv[2].endsWith('/') ? process.argv[2]  +  '**/*' : process.argv[2];
+const paths = glob.sync(pattern).filter(path => path.match(/\.(mkv|mp4)$/)).sort();
 if (paths.length === 0) {
 	console.error('No files found for pattern', process.argv[2]);
 }

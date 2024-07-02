@@ -220,7 +220,6 @@ function ffmpegSubtitles(inputVideo) {
 				return resolve({translated: false});
 			}
 			console.log('Extracting embedded English subtitles for translation');
-			console.log(englishSub);
 			ffmpeg(inputVideo)
 				.output(outputFile)
 				.noVideo()
