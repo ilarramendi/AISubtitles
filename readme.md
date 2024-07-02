@@ -4,10 +4,9 @@ Translate text subtitles (including embedded subtitles) to any language using Op
 
 ## Install
 1. Install ffmpeg: `sudo apt install ffmpeg`
-2. Clone the repo: `git clone https://github.com/ilarramendi/srt-ai`
-3. Install dependencies: `npm install`
-4. Install cli: `npm install -g .`
-5. Clone `.env.example` to `.env` and edit the values
+2. Install `node` and `npm`
+3. Install ai-sub: `npm i -g ai-sub` 
+4. Copy `.env.example` to `.env` and edit the values
 
 ## Usage
 `ai-sub "path/to/movie.mkv"`  
