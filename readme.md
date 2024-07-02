@@ -30,3 +30,6 @@ or for all files in a directory
 | MAX_TOKENS          | Max tokens to send to the model                                                     | 1000                                                             |
 | OPENAI_API_KEY      | OpenAI API key                                                                      | sk-XXX                                                           |
 | AI_MODEL            | OpenAI model to use (for better translations use gpt-4, but its 10x more expensive) | gpt-3.5-turbo                                                    |
+
+## Credits
+This project was inspired by [yazinsai/srt-ai](https://github.com/yazinsai/srt-ai)
