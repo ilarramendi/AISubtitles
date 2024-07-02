@@ -141,14 +141,14 @@ async function translatePath(path) {
 	console.log('Started translation of', path);
 	const content = fs.readFileSync(path).toString();
 	const matches = [];
-	for (const match of content.matchAll(/(\d+\r?\n.* --> .*\n)((?:.+\r?\n)+)/g)) {
+	for (const match of content.matchAll(/(\d+\r?\n.* --> .*\r?\n)((?:.+\r?\n)+)/g)) {
 		matches.push({
 			header: match[1],
 			content: match[2].slice(0, -1).replace(/\n/g, ' '),
 		});
 	}
 	if (matches.length === 0) {
-		console.log(content)
+		console.log(JSON)
 		console.warn('No matches found in', path);
 		return;
 	}
