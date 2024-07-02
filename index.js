@@ -3,9 +3,15 @@ import fs from 'node:fs';
 import {glob} from 'glob';
 import {encoding_for_model} from "tiktoken";
 import dotenv from 'dotenv';
+import OpenAI from "openai";
+
 dotenv.config();
 
-const {OPENAI_API_KEY, TARGET_LANGUAGE, LANGUAGE_SHORT, EXTRA_SPECIFICATION, MAX_TOKENS, AI_MODEL} = process.env;
+const maxTries = 5;
+const openai = new OpenAI();
+
+
+const {OPENAI_API_KEY, TARGET_LANGUAGE, LANGUAGE_SHORT,MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION} = process.env;
 
 if (!OPENAI_API_KEY) {
 	console.error('OPENAI_API_KEY is not set');
@@ -15,7 +21,10 @@ if (!OPENAI_API_KEY) {
 const paths = glob.sync(process.argv[2]).filter(path => path.endsWith('.srt'));
 
 for (const path of paths) {
-	await translatePath(path);
+	await translatePath(path).catch(e => {
+		console.error(e);
+		process.exit(1);
+	});
 }
 
 if (paths.length === 0) {
@@ -54,67 +63,38 @@ function groupSegmentsByTokenLength(segments, length) {
 	return groups;
 }
 
-async function translate(text) {
-	const response = await fetch("https://api.openai.com/v1/chat/completions", {
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${OPENAI_API_KEY}`,
-		},
-		method: "POST",
-		body: JSON.stringify({
-			model: AI_MODEL,
-			frequency_penalty: 0,
-			presence_penalty: 0,
-			top_p: 1,
-			temperature: 0,
-			messages: [
-				{
-					role: "system",
-					content:
-						"You are an experienced semantic translator. Follow the instructions carefully.",
-				},
-				{
-					role: "user",
-					content: `Translate this to ${TARGET_LANGUAGE}${EXTRA_SPECIFICATION ? ` , and ${EXTRA_SPECIFICATION}` : ''}. Use the '|' segment separator in the response. ALWAYS return the SAME number of segments. NEVER skip any segment. NEVER combine segments. Ensure the number of segments matches the original text.\n\n${text}`,
-				},
-			]
-		}),
-	});
-	if (response.status !== 200) {
-		throw new Error('Failed to translate: ' + await response.text());
+async function translate(text, number) {
+	if (number > maxTries) {
+		throw new Error('Failed to translate, max tries exceeded');
 	}
-	const data = await response.json();
-	const choice = data.choices[0];
+	
+	const completion = await openai.chat.completions.create({
+		messages: [
+			{ role: "system", content: `You are an experienced semantic translator. Follow the instructions carefully. Translate this to ${TARGET_LANGUAGE}. ALWAYS return the SAME number of points. NEVER skip any point. NEVER combine point.${EXTRA_SPECIFICATION ? ` ${EXTRA_SPECIFICATION}` : ''}.` },
+			{ role: "user", content: text }
+		],
+		model: AI_MODEL
+	});
+	
+	const choice = completion.choices[0];
 	if (choice.finish_reason !== 'stop') {
 		throw new Error('Failed to translate, translation stopped: ' + choice.finish_reason);
 	}
 
-	const originalSplit = text.split('|');
-	const split = choice.message.content.split('|').map(s => s.trim());
+	const originalSplit = text.split('\n').map(s => s.replace(/^(\d+)\. /, ''));
+	const split = choice.message.content.split('\n').map(s => s.trim().replace(/^(\d+)\. /, ''));
 	if (split.at(-1) === '') {
 		split.pop();
 	}
 	const max = Math.max(split.length, originalSplit.length);
 	if (process.argv.includes('--debug')) {
 		for (let i = 0; i < max; i++) {
-			if (split[i] !== originalSplit[i]) {
-				console.log(originalSplit[i] || '')
-				console.log(split[i] || '')
-				console.log('---')
-			}
+			console.log((originalSplit[i]?.slice(0, 50) ?? '').padEnd(50, ' ') + ' | ' + (split[i]?.slice(0, 50) ?? '').padEnd(50, ' '))
 		}
 
 		if (split.length !== originalSplit.length) {
-			if (!process.argv.includes('--debug')) {
-				for (let i = 0; i < max; i++) {
-					if (split[i] !== originalSplit[i]) {
-						console.log(originalSplit[i] || '')
-						console.log(split[i] || '')
-						console.log('---')
-					}
-				}
-			}
-			throw new Error('Failed to translate, translation length mismatch, received ' + split.length + ' segments, expected ' + text.split('|').length);
+			console.error('Failed to translate, translation length mismatch, received ' + split.length + ' segments, expected ' + originalSplit.length + ' try: ' + number);
+			return translate(text, number + 1);
 		}
 	}
 
@@ -152,12 +132,20 @@ async function translatePath(path) {
 		return;
 	}
 	const groups = groupSegmentsByTokenLength(matches, MAX_TOKENS);
-	for (const group of groups) {
-		const translated = await translate(group.map(m => m.content).join('|'));
-		for (const [i, groupMatch] of group.entries()) {
-			groupMatch.translatedContent = translated[i];
-		}
+	const chunks = [];
+	for (let i = 0; i < groups.length; i += 10) {
+		await Promise.all(groups.slice(i, i + 10).map(async group => {
+			const start = performance.now();
+			const translated = await translate(group.map(m => m.content).map((s, i) => `${i + 1}. ${s}`).join('\n'));
+			if (process.argv.includes('--debug')) {
+				console.log('Translated in', performance.now() - start, 'ms');
+			}
+			for (const [i, groupMatch] of group.entries()) {
+				groupMatch.translatedContent = translated[i];
+			}
+		}));
 	}
+	
 	fs.writeFileSync(
 		path.replace(/(?:\.en(?:-[a-z]+)?)?\.srt$/, `.${TARGET_LANGUAGE} (AI).srt`),
 		matches.map(m => m.header + m.translatedContent).join('\n\n')
