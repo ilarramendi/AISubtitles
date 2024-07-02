@@ -125,6 +125,7 @@ async function translate(text) {
 async function translatePath(path) {
 	let [_, ...ext] = path.split('/').pop().split('.');
 	ext = ext.join('.');
+	console.log(path.replace(ext, '**.srt'))
 	const existingFiles = glob.sync(path.replace(ext, '**.srt'));
 	for (const existingFile of existingFiles) {
 		if (existingFile.endsWith(`.${TARGET_LANGUAGE} (AI).srt`)) {
