@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import {glob} from 'glob';
 import {encoding_for_model} from "tiktoken";
 import dotenv from 'dotenv';
+import {join} from 'node:path';
 
 dotenv.config();
 
@@ -123,10 +124,9 @@ async function translate(text) {
 }
 
 async function translatePath(path) {
-	let [_, ...ext] = path.split('/').pop().split('.');
-	ext = ext.join('.');
-	console.log(path.replace(ext, '**.srt'))
-	const existingFiles = glob.sync(path.replace(ext, '**.srt'));
+	const split = path.split('/');
+	split.pop();
+	const existingFiles = glob.sync(join(...split, `*.srt`));
 	for (const existingFile of existingFiles) {
 		if (existingFile.endsWith(`.${TARGET_LANGUAGE} (AI).srt`)) {
 			console.warn('Skipping, already translated:', path);
