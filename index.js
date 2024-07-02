@@ -3,8 +3,6 @@ import fs from 'node:fs';
 import {glob} from 'glob';
 import {encoding_for_model} from "tiktoken";
 import dotenv from 'dotenv';
-import {join} from 'node:path';
-
 dotenv.config();
 
 const {OPENAI_API_KEY, TARGET_LANGUAGE, LANGUAGE_SHORT, EXTRA_SPECIFICATION, MAX_TOKENS, AI_MODEL} = process.env;
@@ -126,7 +124,7 @@ async function translate(text) {
 async function translatePath(path) {
 	const split = path.split('/');
 	split.pop();
-	const existingFiles = glob.sync(join(...split, `*.srt`));
+	const existingFiles = glob.sync(split.join('/') + `/*.srt`);
 	for (const existingFile of existingFiles) {
 		if (existingFile.endsWith(`.${TARGET_LANGUAGE} (AI).srt`)) {
 			console.warn('Skipping, already translated:', path);
@@ -150,7 +148,6 @@ async function translatePath(path) {
 		});
 	}
 	if (matches.length === 0) {
-		console.log(JSON)
 		console.warn('No matches found in', path);
 		return;
 	}
