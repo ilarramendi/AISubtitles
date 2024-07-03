@@ -423,6 +423,11 @@ export async function checkBatchStatus() {
 		if (job.finished) continue
 		const batch = await openai.batches.retrieve(job.id);
 		if (batch.status === 'completed') {
+			if (!batch.output_file_id) {
+				console.log('Job completed, but no output file id', job.id);
+				jobs = jobs.filter(j => j.id !== job.id);
+				continue;
+			}
 			const content = await openai.files.content(batch.output_file_id);
 			const messages = (await content.text()).split('\n').filter(Boolean).map(s => JSON.parse(s));
 			for (const [i, message] of messages.entries()) {
