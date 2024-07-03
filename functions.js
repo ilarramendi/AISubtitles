@@ -9,7 +9,7 @@ import { glob } from "glob";
 import OpenAI from "openai";
 import { encoding_for_model } from "tiktoken";
 const { green, yellow, white } = colors;
-dotenv.config({ path: path.join(os.homedir(), ".subs-ai") });
+dotenv.config({ path: path.join(os.homedir(), ".subs-ai.env") });
 
 let {
 	TARGET_LANGUAGE,
