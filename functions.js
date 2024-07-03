@@ -26,7 +26,7 @@ TARGET_LANGUAGE_ALIAS = TARGET_LANGUAGE_ALIAS.split(',').map(s => s.trim()).filt
 
 const prompt = `You are an experienced semantic translator.
 Follow the instructions carefully.
-You will receive user messages containing N points in the format:
+You will receive user messages containing a subtitle SRT file (for a tv show or movie) formatted like this:
 """
 1. Message 1
 2. Message 2
@@ -35,10 +35,13 @@ You will receive user messages containing N points in the format:
 N. Message N
 """
 You should respond in the same format, and with the same number of points but translated to ${TARGET_LANGUAGE}.
+ALWAYS Remove non text content from the subtitles, like html tags, or anything that is not readable by a human.
 ALWAYS return the SAME number of points.
 NEVER skip any point.
-NEVER combine points, this is specially important!
+NEVER combine points.
 You are translating a subtitle, so remember each point is something said in a time stamp, and cannot be split or merged with other points.
+Being subtitles, you can use nearby points to infer meaning.
+Remember not to merge points, the last point should be exactly the same number as the input, if the input last number is 7, the output you generate should also end with 7.
 ${EXTRA_SPECIFICATION}`
 
 function groupSegmentsByTokenLength(segments, length) {
@@ -176,6 +179,7 @@ function ffmpegSubtitles(inputVideo) {
 				return reject(err);
 			}
 
+			const fileName = inputVideo.split('/').pop();
 			const subtitleStreams = metadata.streams.filter(stream => stream.codec_type === 'subtitle' && textSubtitleFormats.includes(stream.codec_name.toLowerCase()) && !stream.disposition.forced);
 
 			if (subtitleStreams.length === 0) {
@@ -183,12 +187,12 @@ function ffmpegSubtitles(inputVideo) {
 			}
 			const englishSub = subtitleStreams.find(s => englishAlias.includes(s.tags.language.toLowerCase()));
 			const translation = subtitleStreams.find(stream => TARGET_LANGUAGE_ALIAS.includes(stream.tags.language));
-			const outputFile = inputVideo.replace(/\.(mkv|mp4)$/, '.English (Extracted).srt');
+			const outputFile = inputVideo.replace(/\.(mkv|mp4)$/, '.en.srt');
 			if (translation) {
-				console.log('Extracting embedded subtitles for target language instead of translating');
+				console.log('Extracting embedded subtitles for target language:', fileName);
 				// Extract translated subtitles too
 				return await new Promise((resolve2, reject2) => {
-					const translatedOutput = outputFile.replace('.English (Extracted).srt', `.${TARGET_LANGUAGE} (Extracted).srt`)
+					const translatedOutput = outputFile.replace('.en.srt', `.${TARGET_LANGUAGE_ALIAS[0]}.srt`)
 					ffmpeg(inputVideo)
 						.output(translatedOutput)
 						.noVideo()
@@ -215,11 +219,11 @@ function ffmpegSubtitles(inputVideo) {
 				});
 			}
 			if (!englishSub) {
-				console.log('No english subtitles found');
+				console.warn('No english subtitles found:', fileName);
 				console.log(metadata.streams.filter(s => s.codec_type === 'subtitle' && englishAlias.includes(s.tags.language.toLowerCase())));
 				return resolve({translated: false});
 			}
-			console.log('Extracting embedded English subtitles for translation');
+			console.log('Extracting embedded subs for translation:', fileName);
 			ffmpeg(inputVideo)
 				.output(outputFile)
 				.noVideo()
@@ -253,12 +257,8 @@ export async function translatePath(path, index, total) {
 	const existingFiles = glob.sync(path.replace(/\.(mkv|mp4)$/, '*.srt').replaceAll(/([[\]])/g, '\\$1'));
 	// Validate if it was already translated
 	for (const existingFile of existingFiles) {
-		if (existingFile.endsWith(`.${TARGET_LANGUAGE} (AI).srt`)) {
-			if (debug) console.warn('Skipping, already translated:', path);
-			return;
-		}
 		if (!process.argv.includes('--ignore-existing-translation')) {
-			if (TARGET_LANGUAGE_ALIAS.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`) || existingFile.endsWith(`.${TARGET_LANGUAGE} (Extracted).srt`)) {
+			if (TARGET_LANGUAGE_ALIAS.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`)) {
 				if (debug) console.warn('Skipping, existing translation:', path);
 				return;
 			}
@@ -273,7 +273,7 @@ export async function translatePath(path, index, total) {
 		subtitlePath = executionCache[path].sub;
 	} else {
 		// Find text subtitles
-		subtitlePath = existingFiles.find(f => f.endsWith('.en.srt') || f.endsWith('.English (Extracted).srt'))
+		subtitlePath = existingFiles.find(f => f.endsWith('.en.srt'))
 		if (!subtitlePath) {
 			const ffmpegResult = await ffmpegSubtitles(path);
 			if (ffmpegResult.translated) {
@@ -320,10 +320,10 @@ export async function translatePath(path, index, total) {
 
 	if (matches.every(m => m.translatedContent)) {
 		fs.writeFileSync(
-			subtitlePath.replace(/\.(en|English \(Extracted\))?\.srt$/, `.${TARGET_LANGUAGE} (AI).srt`),
+			subtitlePath.replace('.en.srt', `.${TARGET_LANGUAGE_ALIAS[0]}.srt`),
 			matches.map(m => m.header + m.translatedContent).join('\n\n')
 		);
-		console.log('Successfully translated:', fileName, batch ? '' : 'in' + ((performance.now() - globalStart) / 1000).toFixed(2), 'seconds');
+		console.log('Successfully translated:', fileName, batch ? '' : `in ${((performance.now() - globalStart) / 1000).toFixed(2)} seconds`);
 		return false;
 	}
 
@@ -357,7 +357,7 @@ export async function batchTranslations() {
 		});
 		fs.writeFileSync(cachePath, JSON.stringify(jobs, null, 2));
 		if (!process.argv.includes('--wait')) {
-			console.log('Successfully batched', toBatch.length, 'requests, run the command again in a few minutes to check the status');
+			console.log('Successfully batched a job with:', toBatch.length, 'requests');
 		}
 	}
 	toBatch.splice(0, toBatch.length);
