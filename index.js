@@ -13,7 +13,6 @@ if (paths.length === 0) {
 	console.error('No files found for pattern', process.argv[2]);
 }
 const batch = process.argv.includes('--batch');
-const wait = process.argv.includes('--wait');
 
 async function start() {
 	if (batch) await checkBatchStatus();
@@ -22,19 +21,17 @@ async function start() {
 		await translatePath(path, index, paths.length);
 	}
 	if (batch) await batchTranslations();
+	else return;
 	const jobs = pendingJobs();
 	if (jobs.length === 0) {
 		console.log('Done!');
 		return;
 	}
-	if (wait) {
-		const requests = jobs.map(j => j.requests.length).sort((a, b) => b - a)[0];
-		const tryingIn = 1000 * requests * 7.5;
-		console.log(`${jobs.length} jobs still pending, with ${requests} requests, checking batch status: ${(tryingIn / 60000).toFixed(1)}m`);
-		await new Promise(resolve => setTimeout(resolve, tryingIn));
-		return start();
-	}
-	console.log('Jobs still pending, run the command again in a few minutes to check the status or use --wait');
+	const requests = jobs.map(j => j.requests.length).sort((a, b) => b - a)[0];
+	const tryingIn = 1000 * (requests * 7.5 + 60);
+	console.log(`${jobs.length} jobs still pending, with ${requests} requests, checking batch status: ${(tryingIn / 60000).toFixed(1)}m`);
+	await new Promise(resolve => setTimeout(resolve, tryingIn));
+	return start();
 }
 await start();
 

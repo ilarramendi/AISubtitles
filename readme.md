@@ -15,9 +15,7 @@ or for all files in a directory
 
 ## Parameters
 `--debug` Print debug information  
-`--batch` Batch translation requests using Open AI's Batch API (extremely recommended, allows doing double the requests, but takes a lot more time)  
-`--wait` Wait until all jobs are finished (only works with --batch, may take a while)  
-
+`--batch` Batch translation requests using Open AI's Batch API (extremely recommended, allows doing double the requests, but takes a lot more time, can be restarted)  
 
 ## Options
 | Key                   | Value                                                                               | Example                                                          |
