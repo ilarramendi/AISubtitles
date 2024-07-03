@@ -7,6 +7,7 @@ import OpenAI from "openai";
 import dotenv from 'dotenv';
 import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
+import {green} from 'colors'
 dotenv.config();
 
 let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
@@ -323,7 +324,7 @@ export async function translatePath(path, index, total) {
 			subtitlePath.replace('.en.srt', `.${TARGET_LANGUAGE_ALIAS[0]}.srt`),
 			matches.map(m => m.header + m.translatedContent).join('\n\n')
 		);
-		console.log('Successfully translated:', fileName, batch ? '' : `in ${((performance.now() - globalStart) / 1000).toFixed(2)} seconds`);
+		console.log(green('Successfully translated: ') + fileName + green(batch ? '' : `in ${((performance.now() - globalStart) / 1000).toFixed(2)} seconds`));
 		return false;
 	}
 

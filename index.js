@@ -28,7 +28,7 @@ async function start() {
 		return;
 	}
 	const requests = jobs.map(j => j.requests.length).sort((a, b) => b - a)[0];
-	const tryingIn = Math.min(1000 * (requests * 10 + 60), 3_600_000); // 60s + 10s x request, max 1h
+	const tryingIn = Math.min(1000 * (requests * 3 + 60), 3_600_000); // 60s + 3s x request, max 1h
 	console.log(`${jobs.length} jobs still pending, with ${requests} requests, checking batch status: ${(tryingIn / 60_000).toFixed(tryingIn > 600_000 ? 0 : 1)}m`);
 	await new Promise(resolve => setTimeout(resolve, tryingIn));
 	return start();
