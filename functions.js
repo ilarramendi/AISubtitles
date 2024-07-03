@@ -32,7 +32,6 @@ You will receive user messages containing a subtitle SRT file (for a tv show or 
 """
 1. Message 1
 2. Message 2
-3. Message 3
 ...
 N. Message N
 """
@@ -62,7 +61,7 @@ function groupSegmentsByTokenLength(segments, length) {
 
 		if (currentGroupTokenCount + segmentTokenCount <= length) {
 			currentGroup.push(segment);
-			currentGroupTokenCount += segmentTokenCount + 1; // include size of the "|" delimeter
+			currentGroupTokenCount += segmentTokenCount + 4; // include size of the "\nN. " delimeter
 		} else {
 			groups.push(currentGroup);
 			currentGroup = [segment];
@@ -424,8 +423,11 @@ export async function checkBatchStatus() {
 		const batch = await openai.batches.retrieve(job.id);
 		if (batch.status === 'completed') {
 			if (!batch.output_file_id) {
-				console.error(template('Job completed, but no output file id: {{0}}', job.id));
-				console.log(await(await openai.files.content(batch.error_file_id)).text());
+				const errorFileContent = await(await openai.files.content(batch.error_file_id)).text();
+				for (const line of errorFileContent.split('\n')) {
+					const content = JSON.parse(line);
+					console.error(content?.response?.error?.message ?? content);
+				}
 				jobs = jobs.filter(j => j.id !== job.id);
 				continue;
 			}

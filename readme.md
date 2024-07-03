@@ -29,3 +29,7 @@ or for all files in a directory
 
 ## Credits
 This project was inspired by [yazinsai/srt-ai](https://github.com/yazinsai/srt-ai)
+
+## TODO
+- Improve translation prompt  
+- Train a a model like llama-3-7b to translate subtitles, this can be run locally  
