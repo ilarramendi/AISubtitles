@@ -9,7 +9,6 @@ import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
 import colors from 'colors'
 const { green, red, yellow } = colors;
-console.log(colors)
 dotenv.config();
 
 let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
@@ -182,7 +181,7 @@ function ffmpegSubtitles(inputVideo) {
 				return reject(err);
 			}
 
-			const fileName = inputVideo.split('/').pop();
+			const fileName = mapFileName(inputVideo.split('/').pop());
 			const subtitleStreams = metadata.streams.filter(stream => stream.codec_type === 'subtitle' && textSubtitleFormats.includes(stream.codec_name.toLowerCase()) && !stream.disposition.forced);
 
 			if (subtitleStreams.length === 0) {
@@ -247,6 +246,14 @@ function ffmpegSubtitles(inputVideo) {
 
 }
 
+function mapFileName(fileName) {
+	const match = fileName.match(/.* \(\d{4}\)/);
+	if (match) {
+		return match[0];
+	}
+	return fileName.replace(/\.(mkv|mp4)$/, '');
+}
+
 /**
  * Translates subtitles from a given media file
  * @param path {string} - The path to the media file (mkv or mp4)
@@ -256,7 +263,7 @@ function ffmpegSubtitles(inputVideo) {
  */
 export async function translatePath(path, index, total) {
 	const split = path.split('/');
-	const fileName = split.pop();
+	const fileName = mapFileName(split.pop());
 	const existingFiles = glob.sync(path.replace(/\.(mkv|mp4)$/, '*.srt').replaceAll(/([[\]])/g, '\\$1'));
 	// Validate if it was already translated
 	for (const existingFile of existingFiles) {
