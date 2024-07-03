@@ -403,7 +403,7 @@ export async function batchTranslations() {
 		});
 		fs.writeFileSync(cachePath, JSON.stringify(jobs, null, 2));
 		if (!process.argv.includes('--wait')) {
-			console.log('Successfully batched a job with:', toBatch.length, 'requests');
+			console.log(green(template('Successfully batched a job with: {{0}} requests', toBatch.length)));
 		}
 	}
 	toBatch.splice(0, toBatch.length);
@@ -424,7 +424,8 @@ export async function checkBatchStatus() {
 		const batch = await openai.batches.retrieve(job.id);
 		if (batch.status === 'completed') {
 			if (!batch.output_file_id) {
-				console.log('Job completed, but no output file id', job.id);
+				console.error(template('Job completed, but no output file id: {{0}}', job.id));
+				console.log(await(await openai.files.content(batch.error_file_id)).text());
 				jobs = jobs.filter(j => j.id !== job.id);
 				continue;
 			}
@@ -434,12 +435,12 @@ export async function checkBatchStatus() {
 				job.requests[i].result = message.response.body.choices[0].message.content
 			}
 			job.finished = true;
-			console.log('Job completed', job.id);
+			console.log(green('Job completed:'), job.id);
 		} else if (batch.status === 'failed') {
-			console.log('Job failed', job.id);
+			console.error(template('Job failed: {{0}}', job.id));
 			jobs = jobs.filter(j => j.id !== job.id);
 		} else {
-			console.log('Job not completed:', job.id.batch?.status ?? 'Not created yet');
+			console.log('Job in progress:', job.id.batch?.status ?? 'Not created yet');
 		}
 	}
 	fs.writeFileSync(cachePath, JSON.stringify(jobs, null, 2));
