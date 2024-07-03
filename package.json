@@ -20,5 +20,8 @@
   },
   "bin": {
     "ai-sub": "index.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.8.3"
   }
 }
