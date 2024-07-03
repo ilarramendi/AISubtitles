@@ -170,6 +170,39 @@ async function translate(group, number) {
 }
 
 /**
+ * Generate a string with highlighted data
+ * @param {string|any} string_ - Formatted as: "Hello {{0}}!", if a non string is passed the stringified value is returned, and data is ignored
+ * @param {...any} data
+ * @returns {string} - With the previous example and data ["pepe"] it would return: "Hello pepe!"
+ */
+function template(string_, ...data) {
+	let maxIndex = -1;
+	if (typeof string_ !== 'string') return JSON.stringify(string_);
+	return string_.replaceAll(
+		/{{(\d+)}}/g,
+		(match, number) => {
+			const number_ = Number.parseInt(number);
+			if (number_ >= 0 && number_ < data.length) {
+				if (number_ > maxIndex) maxIndex = number_;
+				if (Array.isArray(data[number_])) {
+					return data[number_].length > 0
+						? data[number_].map(d => white(d)).join(', ')
+						: white('[]');
+				}
+
+				if (typeof data[number_] === 'object') {
+					return white(JSON.stringify(data[number_], undefined, 2));
+				}
+
+				return white(data[number_]);
+			}
+
+			return match;
+		}
+	);
+}
+
+/**
  *
  * @param inputVideo
  * @returns {Promise<{file: string, translated: boolean}>}
@@ -221,8 +254,11 @@ function ffmpegSubtitles(inputVideo) {
 				});
 			}
 			if (!englishSub) {
-				console.warn('No english subtitles found:', fileName);
-				console.log(metadata.streams.filter(s => s.codec_type === 'subtitle' && englishAlias.includes(s.tags.language.toLowerCase())));
+				const englishSubs = metadata.streams.filter(s => s.codec_type === 'subtitle' && englishAlias.includes(s.tags.language.toLowerCase()));
+				console.log(template('No english subtitles found: {{0}}', fileName));
+				if (englishSubs.length > 0) {
+					console.log('Found subs but in incorrect format or strict', englishSub);
+				}
 				return resolve({translated: false});
 			}
 			console.log('Extracting embedded subs for translation:', fileName);
@@ -269,7 +305,7 @@ export async function translatePath(path, index, total) {
 	for (const existingFile of existingFiles) {
 		if (!process.argv.includes('--ignore-existing-translation')) {
 			if (TARGET_LANGUAGE_ALIAS.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`)) {
-				if (debug) console.warn('Skipping, existing translation:', path);
+				if (debug) console.log(template('Skipping, existing translation: {{0}}', path));
 				return;
 			}
 		}
@@ -293,7 +329,7 @@ export async function translatePath(path, index, total) {
 
 			subtitlePath = ffmpegResult.file;
 			if (!subtitlePath) {
-				console.warn(`Skipping: ${fileName}, no subtitles found`);
+				console.log(template('Skipping: {{0}}, no subtitles found', fileName));
 				executionCache[path] = {actionRequired: false};
 				return;
 			}
