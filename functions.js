@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
 import colors from 'colors'
-const { green, red, yellow } = colors;
+const { green, red, white } = colors;
 dotenv.config();
 
 let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
@@ -111,7 +111,7 @@ async function getTranslation(text) {
 
 	const choice = completion.choices[0];
 	if (choice.finish_reason !== 'stop') {
-		console.error('Failed to translate, translation stopped: ' + choice.finish_reason);
+		console.error(template('Failed to translate, translation stopped: {{0}}', choice.finish_reason));
 		return false;
 	}
 
@@ -153,7 +153,7 @@ async function translate(group, number) {
 			fs.writeFileSync(cachePath, JSON.stringify(jobs, null, 2));
 		}
 		if (number >= MAX_TRIES) {
-			console.error(`'Failed to translate, translation length mismatch (${split.length}/${originalSplit.length})`);
+			console.error(template('Failed to translate, translation length mismatch: {{0}}/{{1}}', split.length, originalSplit.length));
 			return false;
 		}
 		if (debug) {
@@ -255,7 +255,7 @@ function ffmpegSubtitles(inputVideo) {
 			}
 			if (!englishSub) {
 				const englishSubs = metadata.streams.filter(s => s.codec_type === 'subtitle' && englishAlias.includes(s.tags.language.toLowerCase()));
-				console.log(template('No english subtitles found: {{0}}', fileName));
+				console.warn(template('No english subtitles found: {{0}}', fileName));
 				if (englishSubs.length > 0) {
 					console.log('Found subs but in incorrect format or strict', englishSub);
 				}
@@ -305,7 +305,7 @@ export async function translatePath(path, index, total) {
 	for (const existingFile of existingFiles) {
 		if (!process.argv.includes('--ignore-existing-translation')) {
 			if (TARGET_LANGUAGE_ALIAS.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`)) {
-				if (debug) console.log(template('Skipping, existing translation: {{0}}', path));
+				if (debug) console.warn(template('Skipping, existing translation: {{0}}', path));
 				return;
 			}
 		}
@@ -329,7 +329,7 @@ export async function translatePath(path, index, total) {
 
 			subtitlePath = ffmpegResult.file;
 			if (!subtitlePath) {
-				console.log(template('Skipping: {{0}}, no subtitles found', fileName));
+				console.warn(template('Skipping: {{0}}, no subtitles found', fileName));
 				executionCache[path] = {actionRequired: false};
 				return;
 			}
