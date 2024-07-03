@@ -16,7 +16,8 @@ const executionCache = {};
 const englishAlias = ['en', 'eng', 'english'];
 const textSubtitleFormats = ['srt', 'ass', 'webvtt', 'subrip', 'ttml', 'vtt', 'mov_text'];
 const batch = process.argv.includes('--batch');
-const debug = process.argv.includes('--debug')
+const debug = process.argv.includes('--debug');
+const table = process.argv.includes('--table');
 const cachePath = path.join(import.meta.dirname, 'cache.json');
 const openai = new OpenAI({apiKey: OPENAI_API_KEY});
 const toBatch = [];
@@ -24,25 +25,32 @@ let jobs = [];
 if (fs.existsSync(cachePath)) {
 	jobs = JSON.parse(fs.readFileSync(cachePath).toString());
 }
+const mostErrored = fs.existsSync('most-errored.jsonl') ? fs.readFileSync('most-errored.jsonl').toString().split('\n') : [];
 TARGET_LANGUAGE_ALIAS = TARGET_LANGUAGE_ALIAS.split(',').map(s => s.trim()).filter(Boolean);
 
 const prompt = `You are an experienced semantic translator.
 Follow the instructions carefully.
-You will receive user messages containing a subtitle SRT file (for a tv show or movie) formatted like this:
+You will receive user messages containing a subtitle SRT file (for a TV show or movie) formatted like this:
+
 """
 1. Message 1
 2. Message 2
 ...
 N. Message N
 """
-You should respond in the same format, and with the same number of points but translated to ${TARGET_LANGUAGE}.
-ALWAYS Remove non text content from the subtitles, like html tags, or anything that is not readable by a human.
-ALWAYS return the SAME number of points.
-NEVER skip any point.
-NEVER combine points.
-You are translating a subtitle, so remember each point is something said in a time stamp, and cannot be split or merged with other points.
-Being subtitles, you can use nearby points to infer meaning.
-Remember not to merge points, the last point should be exactly the same number as the input, if the input last number is 7, the output you generate should also end with 7.
+
+You should respond in the same format and with the same number of points but translated to ${TARGET_LANGUAGE}.
+
+- ALWAYS remove non-text content from the subtitles, like HTML tags, or anything that is not readable by a human.
+- ALWAYS return the SAME number of points.
+- NEVER skip any point.
+- NEVER combine points.
+- ALWAYS remove branding, ads or urls that are not related to the content.
+
+You are translating a subtitle, so remember each point is something said in a timestamp and cannot be split or merged with other points. To improve how natural translations sound, you can make it not as literal. Each point is related and in order; you can use the context to make a better translation.
+
+Remember not to merge points; the last point should be exactly the same number as the input. If the input's last number is 7, the output you generate should also end with 7.
+
 ${EXTRA_SPECIFICATION}`
 
 function groupSegmentsByTokenLength(segments, length) {
@@ -91,7 +99,12 @@ async function getTranslation(text) {
 			},
 			{ role: "user", content: text }
 		],
-		model: AI_MODEL
+		model: AI_MODEL,
+		temperature: 0.3,
+		top_p: 1,
+		n: 1,
+		presence_penalty: 0,
+		frequency_penalty: 0
 	}
 	if (batch) {
 		const job = jobs.find(j => j.requests.find(r => r.content === text))
@@ -117,6 +130,9 @@ async function getTranslation(text) {
 	return choice.message.content;
 }
 
+
+
+
 /**
  * Translates a group of segments
  * Modifies the group in place adding `translatedContent` to each segment
@@ -127,10 +143,25 @@ async function getTranslation(text) {
 async function translate(group, number) {
 	const text = group.map(m => m.content).map((s, i) => `${i + 1}. ${s}`).join('\n');
 
+
 	const translated = await getTranslation(text);
 	if (!translated) {
 		// If we have no translation means its batched, so we try again later
 		return false;
+	}
+
+	if (number > 3) {
+		mostErrored.push(JSON.stringify({
+			messages: [
+				{
+					role: "system",
+					content: prompt
+				},
+				{ role: "user", content: text },
+				{ role: "assistant", content: translated }
+			]
+		}));
+		fs.writeFileSync('most-errored.jsonl', mostErrored.join('\n'));
 	}
 
  	const originalSplit = group.map(m => m.content)
@@ -138,8 +169,8 @@ async function translate(group, number) {
 	if (split.at(-1) === '') {
 		split.pop();
 	}
-	const max = Math.max(split.length, originalSplit.length);
-	if (debug) {
+	const max = Math.min(split.length, originalSplit.length);
+	if (table) {
 		for (let i = 0; i < max; i++) {
 			console.log((originalSplit[i]?.slice(0, 50) ?? '').padEnd(50, ' ') + ' | ' + (split[i]?.slice(0, 50) ?? '').padEnd(50, ' '))
 		}
@@ -304,7 +335,7 @@ export async function translatePath(path, index, total) {
 	for (const existingFile of existingFiles) {
 		if (!process.argv.includes('--ignore-existing-translation')) {
 			if (TARGET_LANGUAGE_ALIAS.some(l => existingFile.endsWith(`.${l}.srt`)) || existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`)) {
-				if (debug) console.warn(template('Skipping, existing translation: {{0}}', path));
+				if (debug) console.warn(template('Skipping, existing translation: {{0}}', fileName));
 				return;
 			}
 		}
@@ -451,4 +482,3 @@ export async function checkBatchStatus() {
 export function pendingJobs() {
 	return jobs.filter(j => !j.finished);
 }
-
