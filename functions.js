@@ -9,7 +9,7 @@ import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
 import colors from 'colors'
 const { green, red, white } = colors;
-dotenv.config();
+dotenv.config({ path: path.join(os.homedir(), '.subs-ai') });
 
 let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
 const executionCache = {};
