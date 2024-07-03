@@ -7,7 +7,8 @@ import OpenAI from "openai";
 import dotenv from 'dotenv';
 import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
-import {green} from 'colors'
+import * as colors from 'colors'
+const { green, red, yellow } = colors;
 dotenv.config();
 
 let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, MAX_TRIES, OPENAI_API_KEY } = process.env;
