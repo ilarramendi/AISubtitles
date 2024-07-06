@@ -7,42 +7,34 @@ import dotenv from "dotenv";
 import ffmpeg from "fluent-ffmpeg";
 import { glob } from "glob";
 import OpenAI from "openai";
+import http from "http"
+
 import { encoding_for_model } from "tiktoken";
-const { green, yellow, white } = colors;
+
+const { green, yellow, white, red, blue } = colors;
+
 dotenv.config({ path: path.join(os.homedir(), ".subs-ai.env") });
 
-let {
-	TARGET_LANGUAGE,
-	TARGET_LANGUAGE_ALIAS,
-	MAX_TOKENS,
-	AI_MODEL,
-	EXTRA_SPECIFICATION,
-	MAX_TRIES,
-	OPENAI_API_KEY,
-} = process.env;
-const executionCache = {};
-const englishAlias = ["en", "eng", "english"];
-const textSubtitleFormats = [
-	"srt",
-	"ass",
-	"webvtt",
-	"subrip",
-	"ttml",
-	"vtt",
-	"mov_text",
-];
+let { TARGET_LANGUAGE, TARGET_LANGUAGE_ALIAS, MAX_TOKENS, AI_MODEL, EXTRA_SPECIFICATION, OPENAI_API_KEY } = process.env;
+
 const debug = process.argv.includes("--debug");
+const useLocalServer = process.argv.includes("--local");
+
+const englishAlias = ["en", "eng", "english"];
+const textSubtitleFormats = ["srt", "ass", "webvtt", "subrip", "ttml", "vtt", "mov_text"];
+
 const cachePath = path.join(import.meta.dirname, "cache.json");
-const translationsCachePath = path.join(
-	import.meta.dirname,
-	"translations.json",
-);
+const translationsCachePath = path.join(import.meta.dirname, "translations.json");
 const errorCachePath = path.join(import.meta.dirname, "errors.json");
+
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+
 const toBatch = [];
 let jobs = [];
 let translations = {};
 let errorCount = {};
+const executionCache = {};
+
 if (fs.existsSync(cachePath)) {
 	jobs = JSON.parse(fs.readFileSync(cachePath).toString());
 }
@@ -52,22 +44,23 @@ if (fs.existsSync(translationsCachePath)) {
 if (fs.existsSync(errorCachePath)) {
 	errorCount = JSON.parse(fs.readFileSync(errorCachePath).toString());
 }
+
 TARGET_LANGUAGE_ALIAS = TARGET_LANGUAGE_ALIAS.split(",")
 	.map((s) => s.trim())
 	.filter(Boolean);
 
 const prompt = `You are an experienced semantic translator.
 Follow the instructions carefully.
-You will receive user messages containing a subtitle SRT file (for a TV show or movie) formatted like this:
+You will receive user messages containing part of a subtitle SRT file formatted like this:
 
-"""
+\`\`\`
 1. Message 1
 2. Message 2
 ...
 N. Message N
-"""
+\`\`\`
 
-You should respond in the same format and with the same number of points but translated to ${TARGET_LANGUAGE}.
+You should respond in the same format and with the same number of points but translated to Spanish.
 
 - ALWAYS remove non-text content from the subtitles, like HTML tags, or anything that is not readable by a human.
 - ALWAYS return the SAME number of points.
@@ -78,6 +71,8 @@ You should respond in the same format and with the same number of points but tra
 You are translating a subtitle, so remember each point is something said in a timestamp and cannot be split or merged with other points. To improve how natural translations sound, you can make it not as literal. Each point is related and in order; you can use the context to make a better translation.
 
 Remember not to merge points; the last point should be exactly the same number as the input. If the input's last number is 7, the output you generate should also end with 7.
+
+Content starts here:
 
 ${EXTRA_SPECIFICATION}`;
 
@@ -97,7 +92,7 @@ function groupSegmentsByTokenLength(segments, length) {
 
 		if (currentGroupTokenCount + segmentTokenCount <= length) {
 			currentGroup.push(segment);
-			currentGroupTokenCount += segmentTokenCount + 4; // include size of the "\nN. " delimeter
+			currentGroupTokenCount += segmentTokenCount + 5; // include size of the "\nNN. " delimeter
 		} else {
 			groups.push(currentGroup);
 			currentGroup = [segment];
@@ -128,7 +123,7 @@ async function getTranslation(text) {
 			{ role: "user", content: text },
 		],
 		model: AI_MODEL,
-		temperature: 0.3,
+		temperature: 0.2,
 		top_p: 1,
 		n: 1,
 		presence_penalty: 0,
@@ -153,20 +148,12 @@ async function getTranslation(text) {
 }
 
 /**
- * Translates a group of segments
- * Modifies the group in place adding `translatedContent` to each segment
- * @param group {{header: string, content: string}[]} - The groups of segments to translate, groups are sliced by total token length to avoid exceeding the token limit
- * @returns {Promise<boolean>} - If the translation was finished successfully
- */
-async function translate(group) {}
-
-/**
  * Generate a string with highlighted data
  * @param {string|any} string_ - Formatted as: "Hello {{0}}!", if a non string is passed the stringified value is returned, and data is ignored
  * @param {...any} data
  * @returns {string} - With the previous example and data ["pepe"] it would return: "Hello pepe!"
  */
-function template(string_, ...data) {
+export function template(string_, ...data) {
 	let maxIndex = -1;
 	if (typeof string_ !== "string") return JSON.stringify(string_);
 	return string_.replaceAll(/{{(\d+)}}/g, (match, number) => {
@@ -174,9 +161,7 @@ function template(string_, ...data) {
 		if (number_ >= 0 && number_ < data.length) {
 			if (number_ > maxIndex) maxIndex = number_;
 			if (Array.isArray(data[number_])) {
-				return data[number_].length > 0
-					? data[number_].map((d) => white(d)).join(", ")
-					: white("[]");
+				return data[number_].length > 0 ? data[number_].map((d) => white(d)).join(", ") : white("[]");
 			}
 
 			if (typeof data[number_] === "object") {
@@ -213,24 +198,14 @@ function ffmpegSubtitles(inputVideo) {
 			if (subtitleStreams.length === 0) {
 				return resolve({});
 			}
-			const englishSub = subtitleStreams.find((s) =>
-				englishAlias.includes(s.tags.language.toLowerCase()),
-			);
-			const translation = subtitleStreams.find((stream) =>
-				TARGET_LANGUAGE_ALIAS.includes(stream.tags.language),
-			);
+			const englishSub = subtitleStreams.find((s) => englishAlias.includes(s.tags.language.toLowerCase()));
+			const translation = subtitleStreams.find((stream) => TARGET_LANGUAGE_ALIAS.includes(stream.tags.language));
 			const outputFile = inputVideo.replace(/\.(mkv|mp4)$/, ".en.srt");
 			if (translation) {
-				console.log(
-					"Extracting embedded subtitles for target language:",
-					fileName,
-				);
+				console.log(blue(template("Extracting embedded subtitles for target language: {{0}}", fileName)));
 				// Extract translated subtitles too
 				return await new Promise((resolve2, reject2) => {
-					const translatedOutput = outputFile.replace(
-						".en.srt",
-						`.${TARGET_LANGUAGE_ALIAS[0]}.srt`,
-					);
+					const translatedOutput = outputFile.replace(".en.srt", `.${TARGET_LANGUAGE_ALIAS[0]}.srt`);
 					ffmpeg(inputVideo)
 						.output(translatedOutput)
 						.noVideo()
@@ -239,13 +214,9 @@ function ffmpegSubtitles(inputVideo) {
 						.on("end", () => {
 							const content = fs.readFileSync(translatedOutput).toString();
 							let result = "";
-							for (const match of content.matchAll(
-								/(\d+\r?\n.* --> .*\r?\n)((?:.+\r?\n)+)/g,
-							)) {
+							for (const match of content.matchAll(/(\d+\r?\n.* --> .*\r?\n)((?:.+\r?\n)+)/g)) {
 								const content =
-									[...match[2].matchAll(/>([^<]+)</g)]
-										.map((m) => m[1].trim())
-										.join(" ") || match[2].trim(); // Transform ass to srt
+									[...match[2].matchAll(/>([^<]+)</g)].map((m) => m[1].trim()).join(" ") || match[2].trim(); // Transform ass to srt
 								result += `${match[1]}${content.replaceAll(/\r?\n/g, " ").replaceAll(/{[^}]+}/g, "")}\n\n`;
 							}
 							fs.writeFileSync(outputFile, result);
@@ -260,20 +231,14 @@ function ffmpegSubtitles(inputVideo) {
 			}
 			if (!englishSub) {
 				const englishSubs = metadata.streams.filter(
-					(s) =>
-						s.codec_type === "subtitle" &&
-						englishAlias.includes(s.tags.language.toLowerCase()),
+					(s) => s.codec_type === "subtitle" && englishAlias.includes(s.tags.language.toLowerCase()),
 				);
-				console.warn(template("No english subtitles found: {{0}}", fileName));
 				if (englishSubs.length > 0) {
-					console.log(
-						"Found subs but in incorrect format or strict",
-						englishSub,
-					);
+					console.log(red(template("\"Found subs but in incorrect format or strict: {{0}}", englishSubs)));
 				}
 				return resolve({ translated: false });
 			}
-			console.log("Extracting embedded subs for translation:", fileName);
+			console.log(green(template("Extracting embedded subs for translation: {{0}}", fileName)))
 			ffmpeg(inputVideo)
 				.output(outputFile)
 				.noVideo()
@@ -290,8 +255,17 @@ function ffmpegSubtitles(inputVideo) {
 	});
 }
 
+/**
+ * Map a file name to a more readable one
+ * @param fileName
+ * @returns {string}
+ */
 function mapFileName(fileName) {
-	const match = fileName.match(/.* \(\d{4}\)/);
+	let match = fileName.match(/(.*) \[/);
+	if (match) {
+		return match[1];
+	}
+	match = fileName.match(/.* \(\d{4}\)/);
 	if (match) {
 		return match[0];
 	}
@@ -305,9 +279,7 @@ function mapFileName(fileName) {
  * @returns {Promise<{subtitlePath: string, matches: *[]} | false>}
  */
 async function getFileMatches(path, fileName) {
-	const existingFiles = glob.sync(
-		path.replace(/\.(mkv|mp4)$/, "*.srt").replaceAll(/([[\]])/g, "\\$1"),
-	);
+	const existingFiles = glob.sync(path.replace(/\.(mkv|mp4)$/, "*.srt").replaceAll(/([[\]])/g, "\\$1"));
 	// Validate if it was already translated
 	for (const existingFile of existingFiles) {
 		if (!process.argv.includes("--ignore-existing-translation")) {
@@ -315,10 +287,7 @@ async function getFileMatches(path, fileName) {
 				TARGET_LANGUAGE_ALIAS.some((l) => existingFile.endsWith(`.${l}.srt`)) ||
 				existingFile.endsWith(`.${TARGET_LANGUAGE}.srt`)
 			) {
-				if (debug)
-					console.warn(
-						template("Skipping, existing translation: {{0}}", fileName),
-					);
+				if (debug) console.warn(template("Skipping, existing translation: {{0}}", fileName));
 				return false;
 			}
 		}
@@ -326,7 +295,7 @@ async function getFileMatches(path, fileName) {
 	const matches = [];
 	let subtitlePath;
 	if (executionCache[path]) {
-		if (!executionCache[path].actionRequired) return false;
+		if (executionCache[path].canSkip) return false;
 		matches.push(...executionCache[path].matches);
 		subtitlePath = executionCache[path].sub;
 	} else {
@@ -335,27 +304,21 @@ async function getFileMatches(path, fileName) {
 		if (!subtitlePath) {
 			const ffmpegResult = await ffmpegSubtitles(path);
 			if (ffmpegResult.translated) {
-				executionCache[path] = { actionRequired: false };
+				executionCache[path] = { canSkip: true };
 				return false;
 			}
 
 			subtitlePath = ffmpegResult.file;
 			if (!subtitlePath) {
-				console.log(
-					yellow(template("Skipping: {{0}}, no subtitles found", fileName)),
-				);
-				executionCache[path] = { actionRequired: false };
+				console.log(yellow(template("Skipping: {{0}}, no subtitles found", fileName)));
+				executionCache[path] = { canSkip: true };
 				return false;
 			}
 		}
 		const content = fs.readFileSync(subtitlePath).toString();
-		for (const match of content.matchAll(
-			/(\d+\r?\n.* --> .*\r?\n)((?:.+\r?\n)+)/g,
-		)) {
+		for (const match of content.matchAll(/(\d+\r?\n.* --> .*\r?\n)((?:.+\r?\n)+)/g)) {
 			const trimmedMatch = match[2].trim();
-			let content = [...trimmedMatch.matchAll(/>([^<]+)</g)]
-				.map((m) => m[1].trim())
-				.join(" "); // Transform ass to srt
+			let content = [...trimmedMatch.matchAll(/>([^<]+)</g)].map((m) => m[1].trim()).join(" "); // Transform ass to srt
 			if (!content && !trimmedMatch.startsWith("<")) {
 				content = trimmedMatch;
 			}
@@ -373,57 +336,89 @@ async function getFileMatches(path, fileName) {
 	return { matches, subtitlePath };
 }
 
+function getLocalTranslation(text) {
+	const data = JSON.stringify({ text })
+	const options = {
+		hostname: '192.168.1.191',
+		port: 45313,
+		path: '/translate',
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			'Content-Length': Buffer.byteLength(data)
+		}
+	}
+	return new Promise((resolve, reject) => {
+		const req = http.request(options, (res) => {
+			let data = '';
+
+			res.on('data', (chunk) => {
+				data += chunk;
+			});
+
+			res.on('end', () => {
+				resolve(data);
+			});
+		});
+
+		req.on('error', (e) => {
+			reject(`Problem with request: ${e.message}`);
+		});
+
+		// Write data to request body
+		req.write(data);
+		req.end();
+	});
+}
+
 /**
  * Translates subtitles from a given media file
  * @param path {string} - The path to the media file (mkv or mp4)
- * @param index {number} - The index of the file
- * @param total {number} - The total number of files
- * @returns {Promise<void>}
+ * @returns {Promise<void>} - The number of translations left to do
  */
-export async function translatePath(path, index, total) {
+export async function translatePath(path) {
 	const split = path.split("/");
 	const fileName = mapFileName(split.pop());
 	const result = await getFileMatches(path, fileName);
 	if (!result) return;
 	const { matches, subtitlePath } = result;
+	if (useLocalServer) {
+	}
 	// console.log(`[${index}/${total}] Started translation of: ${fileName}`);
 	const groups = groupSegmentsByTokenLength(matches, MAX_TOKENS);
 	const allTranslations = [];
 	for (const group of groups) {
 		try {
-			const response = await getTranslation(
-				group.map((s, i) => `${i + 1}. ${s.content}`).join("\n"),
-			);
+			if (useLocalServer) {
+				console.log("Getting server translation...");
+				const start = performance.now();
+				const response = await getLocalTranslation(matches.map((m) => m.content).join("\n"))
+				console.log(response)
+				console.log(((performance.now() - start) / 60e3).toFixed(2));
+				console.log("Done, waiting 10s for next request");
+				await new Promise((resolve) => setTimeout(resolve, 10000));
+				return;
+			}
+			const response = await getTranslation(group.map((s, i) => `${i + 1}. ${s.content}`).join("\n"));
 			if (!response) continue; // If we have no translation means its batched, so we try again later
 			allTranslations.push(response);
 		} catch (e) {
-			console.log("Error during translation:", fileName, e.message);
+			console.log(red(template('Error during translation of: {{0}}', fileName)));
+			console.log(e)
 			return;
 		}
 	}
 
 	if (allTranslations.length === groups.length) {
 		fs.writeFileSync(
-			subtitlePath.replace(".en.srt", `.${TARGET_LANGUAGE_ALIAS[0]}.srt`), // TODO: Add a flag to choose the language
+			subtitlePath.replace(".en.srt", `.${TARGET_LANGUAGE_ALIAS[0]}.srt`),
 			allTranslations
 				.flat()
 				.map((m, i) => matches[i].header + m)
 				.join("\n\n"),
 		);
 		console.log(green("Successfully translated: ") + fileName);
-		return;
 	}
-
-	console.log(
-		yellow(
-			template(
-				"Missing: {{0}}/{{1}} translations for: {{2}}",
-				groups.length - allTranslations.length,
-				groups.length,
-				fileName,
-			),
-		),
-	);
 }
 
 /**
@@ -434,14 +429,9 @@ export async function batchTranslations() {
 	if (toBatch.length > 0) {
 		console.log("Batching", toBatch.length, "requests");
 		for (let i = 0; i < toBatch.length; i += 50) {
+			const group = toBatch.slice(i, i + 50);
 			const jsonl = path.join(os.tmpdir(), "openai-batch.jsonl");
-			fs.writeFileSync(
-				jsonl,
-				toBatch
-					.slice(i, i + 50)
-					.map((b) => JSON.stringify(b))
-					.join("\n"),
-			);
+			fs.writeFileSync(jsonl, group.map((b) => JSON.stringify(b)).join("\n"));
 			const file = await openai.files.create({
 				file: fs.createReadStream(jsonl),
 				purpose: "batch",
@@ -453,14 +443,13 @@ export async function batchTranslations() {
 			});
 			jobs.push({
 				...batch,
-				requests: toBatch.map((b) => ({
+				requests: group.map((b) => ({
 					content: b.body.messages[1].content,
 					id: batch.id,
 				})),
 			});
+			fs.writeFileSync(cachePath, JSON.stringify(jobs));
 		}
-
-		fs.writeFileSync(cachePath, JSON.stringify(jobs));
 	}
 	const addedJobs = toBatch.length > 0;
 	toBatch.splice(0, toBatch.length);
@@ -477,23 +466,16 @@ export async function checkBatchStatus() {
 		return false;
 	}
 	let jobCompleted = false;
-	console.log("Checking jobs in progress");
 	for (const job of [...jobs]) {
 		if (job.finished) continue;
 		const batch = await openai.batches.retrieve(job.id);
 		if (batch.status === "completed") {
 			if (!batch.output_file_id) {
-				const errorFileContent = await (
-					await openai.files.content(batch.error_file_id)
-				).text();
+				const errorFileContent = await (await openai.files.content(batch.error_file_id)).text();
 				jobs = jobs.filter((j) => j.id !== job.id);
 				for (const line of errorFileContent.split("\n").filter(Boolean)) {
 					const content = JSON.parse(line);
-					if (
-						content?.response?.body?.error?.message.includes(
-							"You exceeded your current quota",
-						)
-					) {
+					if (content?.response?.body?.error?.message.includes("You exceeded your current quota")) {
 						console.error(
 							"Quota exceeded. Check your usage in: https://platform.openai.com/usage or https://platform.openai.com/organization/usage",
 						);
@@ -511,31 +493,23 @@ export async function checkBatchStatus() {
 				.split("\n")
 				.filter(Boolean)
 				.map((s) => JSON.parse(s));
+			let successCount = 0;
 			for (const [i, message] of messages.entries()) {
 				const split = message.response.body.choices[0].message.content
 					.split("\n")
 					.map((s) => s.trim().replace(/^(\d+)\. /, ""));
 				const originalSplit = job.requests[i].content.split("\n");
+
+				// Translation length mismatch
 				if (split.length !== originalSplit.length) {
-					console.warn(
-						template(
-							"Failed to translate, translation length mismatch: {{0}}/{{1}}",
-							split.length,
-							originalSplit.length,
-						),
-					);
-					errorCount[job.requests[i].content] =
-						(errorCount[job.requests[i].content] ?? 0) + 1;
+					errorCount[job.requests[i].content] = (errorCount[job.requests[i].content] ?? 0) + 1;
+					if (errorCount[job.requests[i].content] > 20) {
+					}
 					continue;
 				}
 
-				if (
-					errorCount[job.requests[i].content] &&
-					errorCount[job.requests[i].content] > 4
-				) {
-					console.warn(
-						'Translation failed a lot of times, saving to "most-errored.jsonl"',
-					);
+				if (errorCount[job.requests[i].content] && errorCount[job.requests[i].content] > 10) {
+					console.warn('Translation failed a lot of times, saving to "most-errored.jsonl"');
 					const mostErrored = fs.existsSync("most-errored.jsonl")
 						? fs.readFileSync("most-errored.jsonl").toString().split("\n")
 						: [];
@@ -560,18 +534,14 @@ export async function checkBatchStatus() {
 					console.log("Segment translated successfully");
 				}
 				translations[job.requests[i].content] = split;
+				successCount++;
 			}
 			jobs = jobs.filter((j) => j.id !== job.id);
-			console.log(green("Job completed:"), job.id);
+			console.log(green(template("Job: {{0}} completed: {{1}}/{{2}}", job.id, successCount, job.requests.length)));
 			jobCompleted = true;
 		} else if (batch.status === "failed") {
 			console.error(template("Job failed: {{0}}", job.id));
 			jobs = jobs.filter((j) => j.id !== job.id);
-		} else {
-			console.log(
-				"Job in progress:",
-				job.id.batch?.status ?? "Not created yet",
-			);
 		}
 	}
 	fs.writeFileSync(cachePath, JSON.stringify(jobs));
