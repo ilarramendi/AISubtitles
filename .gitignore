@@ -130,6 +130,10 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+error.json
 most-errored.jsonl
-translations-chatgpt.json
 translations.json
+errors.json
+lora_model/
+wandb/
+outputs/

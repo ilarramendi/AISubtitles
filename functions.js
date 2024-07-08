@@ -203,6 +203,7 @@ function ffmpegSubtitles(inputVideo) {
 			const outputFile = inputVideo.replace(/\.(mkv|mp4)$/, ".en.srt");
 			if (translation) {
 				console.log(blue(template("Extracting embedded subtitles for target language: {{0}}", fileName)));
+
 				// Extract translated subtitles too
 				return await new Promise((resolve2, reject2) => {
 					const translatedOutput = outputFile.replace(".en.srt", `.${TARGET_LANGUAGE_ALIAS[0]}.srt`);
@@ -391,13 +392,15 @@ export async function translatePath(path) {
 		try {
 			if (useLocalServer) {
 				console.log("Getting server translation...");
-				const start = performance.now();
-				const response = await getLocalTranslation(matches.map((m) => m.content).join("\n"))
-				console.log(response)
-				console.log(((performance.now() - start) / 60e3).toFixed(2));
-				console.log("Done, waiting 10s for next request");
-				await new Promise((resolve) => setTimeout(resolve, 10000));
-				return;
+				const response = await fetch(`http://192.168.1.191:45313/translate`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ text: matches.map((m) => m.content).join("\n") }),
+				}).then((r) => r.json());
+				console.log(response.translated_text);
+				process.exit(0);
 			}
 			const response = await getTranslation(group.map((s, i) => `${i + 1}. ${s.content}`).join("\n"));
 			if (!response) continue; // If we have no translation means its batched, so we try again later

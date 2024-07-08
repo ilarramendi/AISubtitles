@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import process from "node:process";
 import { glob } from "glob";
+
 import {
 	batchTranslations,
 	checkBatchStatus,
@@ -12,6 +13,7 @@ import {
 const pattern = process.argv[2]?.endsWith("/")
 	? `${process.argv[2]}/{*,**/*}`
 	: process.argv[2];
+
 if (!pattern) {
 	console.error("No pattern provided");
 	process.exit(1);
